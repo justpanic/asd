@@ -47,7 +47,7 @@
 	<div class="col-md-8 col-md-offset-2">	
 		
 		<br><br>
-		<h2> SIGN UP ASD!! </h2>
+		<h2> SIGN UP ASD </h2>
 		<br><br>
 		
 		
