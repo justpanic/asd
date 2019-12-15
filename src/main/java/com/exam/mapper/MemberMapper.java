@@ -19,9 +19,12 @@ public interface MemberMapper {
 	@Select("SELECT * FROM members WHERE email=#{email}")
 	public MemberVO getMemberByEmail(String email);
 	
+	@Select("SELECT * FROM members WHERE unum=#{unum}")
+	public MemberVO getMemberByUnum(int unum);
+	
 	// 가입날짜순으로 모든 회원 내림차순 목록 리턴
 	@Select("SELECT * FROM members ORDER BY reg_date DESC")
-	public List<MemberVO> getMembers();
+	public List<MemberVO> getMemberAll();
 	
 	// 해당 계정 존재여부 정수 리턴(존재하면 1, 아니면 0 리턴)
 	@Select("SELECT COUNT(*) FROM members WHERE email=#{email}")

@@ -10,7 +10,9 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import javax.servlet.ServletContext;
@@ -26,11 +28,15 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.exam.domain.AdditionalVO;
 import com.exam.domain.AttachVO;
+import com.exam.domain.LatLngVO;
 import com.exam.domain.MemberVO;
+import com.exam.service.AttachService;
 import com.exam.service.MemberService;
 
 import net.coobird.thumbnailator.Thumbnailator;
@@ -41,6 +47,8 @@ public class MemberController {
 
 	@Autowired
 	private MemberService memberService;
+	@Autowired
+	private AttachService attachService;
 
 	@GetMapping("join")
 	public void join() {}
@@ -59,7 +67,7 @@ public class MemberController {
 		// 주민번호로부터 나이 추출
 		int age = 0;
 		try {
-			String birthYear = memberVO.getResidentId().substring(0, 2);
+			String birthYear = memberVO.getResidentIdF().substring(0, 2);
 			SimpleDateFormat sdf = new SimpleDateFormat("yy-MM-dd");
 			
 			Date birthday = sdf.parse(birthYear+"-01-01");
@@ -77,11 +85,11 @@ public class MemberController {
 		}
 		
 		// 주민번호로부터 성별 추출
-		String backNumber = memberVO.getResidentId().split("-")[1];
+		String backNumber = memberVO.getResidentIdB();
 		if (backNumber.startsWith("1") || backNumber.startsWith("3")) {
-			memberVO.setGender("남자");
+			memberVO.setGender("남");
 		} else {
-			memberVO.setGender("여자");
+			memberVO.setGender("여");
 		}
 		
 		int check = memberService.insertMember(memberVO);
@@ -99,7 +107,7 @@ public class MemberController {
 		StringBuilder sb = new StringBuilder();
 		sb.append("<script>");
 		sb.append("alert('" + message + "');");
-		sb.append("location.href='/member/addpic';");
+		sb.append("location.href='/member/login';");
 		sb.append("</script>");
 
 		return new ResponseEntity<String>(sb.toString(), headers, HttpStatus.OK);
@@ -175,31 +183,71 @@ public class MemberController {
 	
 	@GetMapping("mypage")
 	public String mypage(String email, Model model) {
-		
-		MemberVO memberVO = memberService.getMemberByEmail(email);
-		System.out.println(email);
-		System.out.println(memberVO);
-		model.addAttribute("member", memberVO);
-		
 		return "member/mypage";
 	}
 	
-	@PostMapping("upmypage")
-	public String upmypage(MultipartFile[] files, MemberVO memberVO, HttpServletRequest request) throws Exception{
+	@GetMapping("additional")
+	public String additional(String email, Model model) {
+		AdditionalVO additionalVO = memberService.getAddtionByUnum(memberService.getMemberByEmail(email).getUnum());
+		model.addAttribute("addition", additionalVO);
+		return "member/additional";
+	}
+	
+	@PostMapping("additional")
+	public ResponseEntity<String> additional(String email, AdditionalVO additionalVO) {
+		int unum = memberService.getMemberByEmail(email).getUnum();
+		additionalVO.setUnum(unum);
+		
+		String message = "";
+		int check = 0;
+		if (memberService.isAdded(unum)) {
+			check = memberService.updateAddition(additionalVO);
+		} else {
+			check = memberService.insertAddition(additionalVO);
+		}
+		
+		if (check != 0) {
+			message = "추가정보 수정에 성공했습니다.";
+		} else {
+			message = "추가정보 수정에 실패했습니다.";
+		}
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.add("Content-Type", "text/html; charset=UTF-8");
+		StringBuilder sb = new StringBuilder();
+		sb.append("<script>");
+		sb.append("alert('" + message + "');");
+		sb.append("location.href='/member/mypage';");
+		sb.append("</script>");
+
+		return new ResponseEntity<String>(sb.toString(), headers, HttpStatus.OK);
+	}
+	
+	@GetMapping("attach")
+	public String attach() {
+		return "member/attach";
+	}
+	
+	@PostMapping("attach")
+	public String attach(MultipartFile[] files, String email, HttpServletRequest request) throws Exception{
+		
+		int unum = memberService.getMemberByEmail(email).getUnum();
+		AdditionalVO additionalVO = memberService.getAddtionByUnum(unum);
 		
 		ServletContext application = request.getServletContext();
 		String realPath = application.getRealPath("/resources/upload");
-				
+		
 		List<AttachVO> attachList = new ArrayList<AttachVO>();
 		
-//		String mpic="";
-//		MemberVO nofixVO = memberService.getMemberByEmail(memberVO.getEmail());
+		String mpic="";
+//		MemberVO oldVO = memberService.getMemberByEmail(memberVO.getEmail());
+//		AdditionalVO oldAddVO = memberService.getAddtionByUnum(additionalVO.getUnum());
 		
 		for(MultipartFile multipartFile : files) {
-//			if(multipartFile.isEmpty()) {
-//				mpic=nofixVO.getMpic();
-//				continue;
-//			}
+			if(multipartFile.isEmpty()) {
+				mpic=additionalVO.getMpic();
+				continue;
+			}
 			
 			String uploadFileName = multipartFile.getOriginalFilename();
 			UUID uuid = UUID.randomUUID();
@@ -208,12 +256,12 @@ public class MemberController {
 			multipartFile.transferTo(saveFile);
 			
 			AttachVO attachVO = new AttachVO();
-			attachVO.setUnum(memberVO.getUnum());
+			attachVO.setUnum(unum);
 			attachVO.setUuid(uuid.toString());
 			attachVO.setPath(realPath);
 			attachVO.setName(multipartFile.getOriginalFilename());
 			
-//			mpic=multipartFile.getOriginalFilename();
+			mpic=multipartFile.getOriginalFilename();
 			
 			if(isImageType(saveFile)) {
 				File thumnailFile = new File(realPath, "s_"+uploadFileName);
@@ -228,11 +276,31 @@ public class MemberController {
 		} // for문
 		
 		
-//		memberVO.setMpic(mpic);
-//		memberService.updateMember(memberVO);
-//		attachService.insertAttaches(attachList);
+		additionalVO.setMpic(mpic);
+		memberService.updateAddition(additionalVO);
+		attachService.insertAttaches(attachList);
 		
 		return "main/main";
+	}
+	
+	@PostMapping("latLng")
+	@ResponseBody
+	public List<LatLngVO> latLng(
+			@RequestParam("lat")double lat,
+			@RequestParam("lng")double lng,
+			String email) {
+		int unum = memberService.getMemberByEmail(email).getUnum();
+		LatLngVO latLngVO = new LatLngVO();
+		latLngVO.setLat(lat);
+		latLngVO.setLng(lng);
+		latLngVO.setUnum(unum);
+		if (memberService.isLatLngExist(unum)) {
+			memberService.updateLatLng(latLngVO);
+		} else {
+			memberService.insertLatLng(latLngVO);
+		}
+		
+		return memberService.getLatLngAll();
 	}
 	
 	
